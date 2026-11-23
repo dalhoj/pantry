@@ -1,34 +1,26 @@
-# Pantry v0.1
+# Pantry v0.2
 
-Selvhostet Pantry-webapp til TrueNAS SCALE.
+Selvhostet Pantry-webapp til TrueNAS SCALE med stregkodeopslag og lokal OCR af datomærkning.
 
-## Funktioner
-- Lageroversigt
-- Tilfoej varer med antal, placering, kategori og udloebsdato
-- Foto fra mobilkamera eller fil
-- +/- antal og sletning
-- Udlober snart/udlobet-status
-- SQLite-data og uploads gemmes persistent i `/data`
-- Responsivt layout til mobil og iPad
+## Nyt i v0.2
+- AI-scan-side med produktfoto/stregkode og separat datofoto
+- EAN/UPC-aflæsning med ZBar/pyzbar
+- Produktopslag i Open Food Facts
+- Lokal Tesseract OCR med flere billedvarianter
+- Danske datoformater: DD.MM.YY, DD/MM/YYYY, DD-MM-YY og DDMMYY
+- Resultatside med sikkerhed, kontrol og valg af placering
+- Automatisk databasemigrering fra v0.1
+- Eksisterende data i /data bevares
 
-## GitHub Container Registry
-Workflowet `.github/workflows/docker.yml` bygger automatisk:
+## TrueNAS-opdatering
+1. Upload indholdet af denne mappe til roden af dalhoj/pantry.
+2. Vent på grønt GitHub Actions-build.
+3. I TrueNAS: Apps -> pantry -> Update eller redeploy/restart med pull af nyeste image.
+4. Behold volume `/mnt/Fast/Docker/pantry:/data` og port `8180:8080`.
+5. Åbn `http://TRUENAS-IP:8180`.
 
-`ghcr.io/dalhoj/pantry:latest`
-
-ved push til `main`.
-
-Hvis GitHub-repositoriet er privat, skal TrueNAS have credentials til GHCR. Den nemmeste foerste test er at goere package-imaget public i GitHub Packages, mens selve repositoryet stadig kan vaere privat.
-
-## TrueNAS
-1. Opret et dataset, fx `/mnt/tank/apps/pantry`.
-2. Ret `POOL` i `docker-compose.yml` til dit poolnavn.
-3. Skift `SECRET_KEY`.
-4. Apps -> Discover Apps -> menu -> Install via YAML.
-5. Indsaet YAML fra `docker-compose.yml` og installer.
-6. Aabn `http://TRUENAS-IP:8080`.
-
-## Lokal Docker-test
-`docker compose up -d`
-
-Bemærk: Ret volume-stien foerst, hvis du tester uden for TrueNAS.
+## Vigtigt
+- Open Food Facts kræver internetadgang fra containeren for produktnavn/kategori.
+- OCR og stregkodeaflæsning sker lokalt.
+- Resultater skal altid kontrolleres før gemning.
+- Et foto af datomærkningen tæt på, uden genskin, giver bedst resultat.
