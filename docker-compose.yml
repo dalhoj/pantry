@@ -1,0 +1,13 @@
+services:
+  pantry:
+    image: ghcr.io/dalhoj/pantry:latest
+    container_name: pantry
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Europe/Copenhagen
+      PANTRY_DATA_DIR: /data
+      SECRET_KEY: change-this-to-a-long-random-value
+    volumes:
+      - /mnt/POOL/apps/pantry:/data
