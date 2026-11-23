@@ -1,14 +1,16 @@
-# Pantry v0.4.0
+# Pantry v0.5.0
 
-Oven på v0.3.1:
-- BRUG SNART øverst på forsiden, maks 5 batches og sorteret efter udløbsdato.
-- Farver: rød = udløbet/i dag, orange = 1-3 dage, gul = 4-7 dage.
-- /expiry viser alle daterede varer sorteret efter udløb.
-- 'Ingen holdbarhedsdato' ved Scan ind. Valget huskes per stregkode.
-- Varer uden dato kommer aldrig i BRUG SNART.
-- Type-regler udvidet med opvaskemiddel, opvaskemaskinesalt og sæbe.
-- v0.3.1 live ZXing-scanner og database bevares.
+Nyt siden v0.4:
+- Ensartet Pantry SVG-ikonsæt for produkttyper i stedet for bogstaver.
+- Ny bundnavigation: Hjem, Søg, Scan, Indkøb, Mere.
+- Aktiv menu er tydeligt markeret.
+- Scan åbner central menu med Scan ind / Scan ud.
+- Indkøbsliste med manuel tilføjelse, antal, færdigmarkering og sletning.
+- Badge på Indkøb viser antal åbne varer.
+- Scan ud kan tilføje produktet til indkøb, når sidste enhed bruges.
+- Brug snart, ingen holdbarhedsdato og v0.4-funktioner bevares.
+- v0.3.1 ZXing live-scanner bevares.
 
-TrueNAS image: ghcr.io/dalhoj/pantry:0.4
+TrueNAS image: ghcr.io/dalhoj/pantry:0.5
 Port: 8180:8080
 Data: /mnt/Fast/Docker/pantry:/data
