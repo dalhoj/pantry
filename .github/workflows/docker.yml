@@ -28,4 +28,6 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/dalhoj/pantry:latest
+          tags: |
+            ghcr.io/dalhoj/pantry:latest
+            ghcr.io/dalhoj/pantry:0.2
