@@ -1,13 +1,12 @@
-# Pantry v0.3.0
-Scan ind -> skriv udløbsdato -> gem -> søg -> scan ud.
+# Pantry v0.3.1
+Safari/iPhone/iPad scanner-fix oven på v0.3.
 
-- OCR/Tesseract fjernet
-- Open Food Facts stregkodeopslag
-- Produkttype/brand/variant og batch-lager
-- Søgefunktion
-- Scan ud bruger ældste udløbsbatch først
-- Automatisk migration af v0.2 items
-- PWA manifest
-- Manuel stregkodefallback
+- Start kamera-knap, så Safari får en eksplicit brugerhandling.
+- ZXing Browser scanner EAN/UPC fra livevideo i stedet for BarcodeDetector API.
+- Manuel stregkode bevares som fallback.
+- Scan ind, Scan ud, søgning, grupper og eksisterende v0.3 database bevares.
+- Kræver HTTPS for live kamera.
 
-Live kamera kræver normalt HTTPS/sikker kontekst på mobil. Tag backup af `/mnt/Fast/Docker/pantry/pantry.db` før første v0.3-start.
+TrueNAS image: ghcr.io/dalhoj/pantry:0.3.1
+Port: 8180:8080
+Data: /mnt/Fast/Docker/pantry:/data
