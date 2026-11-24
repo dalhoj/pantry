@@ -1,11 +1,8 @@
 services:
   pantry:
-    image: ghcr.io/dalhoj/pantry:0.6.9
+    image: ghcr.io/dalhoj/pantry:0.6.9.1
     container_name: pantry
     restart: unless-stopped
     ports: ["8180:8080"]
-    environment:
-      TZ: Europe/Copenhagen
-      PANTRY_DATA_DIR: /data
-      SECRET_KEY: pantry-change-this-later
+    environment: {TZ: Europe/Copenhagen, PANTRY_DATA_DIR: /data, SECRET_KEY: pantry-change-this-later}
     volumes: ["/mnt/Fast/Docker/pantry:/data"]

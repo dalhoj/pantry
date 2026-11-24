@@ -67,13 +67,18 @@ def lookup(b):
  try:
   j=requests.get(OFF.format(b),params={'fields':'product_name,product_name_da,brands,categories'},headers={'User-Agent':'Pantry/0.6.3'},timeout=8).json();p=j.get('product',{});n=p.get('product_name_da') or p.get('product_name') or '';cat=(p.get('categories') or '').split(',')[0].strip();return {'name':n,'brand':p.get('brands') or '','type':kind(n,cat),'category':cat,'variant':'','source':'openfoodfacts'} if j.get('status')==1 else {}
  except:return {}
-def total_for_type(c,typ): return c.execute('SELECT COALESCE(SUM(i.quantity),0)n FROM inventory i JOIN products p ON p.id=i.product_id WHERE p.type=?',(typ,)).fetchone()['n']
+def total_for_product(c,pid): return c.execute('SELECT COALESCE(SUM(quantity),0)n FROM inventory WHERE product_id=?',(pid,)).fetchone()['n']
 def maybe_shop(c,pid,name,typ):
- total=total_for_type(c,typ); p=c.execute('SELECT minimum_stock FROM products WHERE id=?',(pid,)).fetchone(); threshold=p['minimum_stock'] if p and p['minimum_stock'] is not None else 0
+ total=total_for_product(c,pid)
+ p=c.execute('SELECT minimum_stock FROM products WHERE id=?',(pid,)).fetchone()
+ threshold=p['minimum_stock'] if p and p['minimum_stock'] is not None else 0
  if total<=threshold:
   exists=c.execute('SELECT 1 FROM shopping WHERE checked=0 AND (product_id=? OR lower(name)=lower(?))',(pid,name)).fetchone()
-  if not exists:c.execute('INSERT INTO shopping(name,type,product_id,quantity,created_at) VALUES(?,?,?,?,?)',(name,typ,pid,1,now()));return True
+  if not exists:
+   c.execute('INSERT INTO shopping(name,type,product_id,quantity,created_at) VALUES(?,?,?,?,?)',(name,typ,pid,1,now()))
+   return True
  return False
+
 init()
 @app.context_processor
 def ctx():return {'dleft':dleft,'shopcount':shopcount()}
@@ -117,19 +122,14 @@ def scanin():
  return render_template('scan_in.html',active='scan',barcode=b,product=pdata,locations=locs(),product_types=product_types(),recommended_location=rec_loc,recommendation_reason=rec_reason,is_unknown=bool(b and not pdata.get('name')))
 @app.get('/scan/out/select')
 def scanout_select():
- q=request.args.get('q','').strip().lower()
- items=rows()
- if q:
-  items=[x for x in items if q in ' '.join(str(x[k] or '') for k in ['name','brand','type','variant','location']).lower()]
- # One searchable inventory list; manual products work exactly like scanned products.
+ q=request.args.get('q','').strip().lower();items=rows()
+ if q:items=[x for x in items if q in ' '.join(str(x[k] or '') for k in ['name','brand','type','variant','location']).lower()]
  return render_template('scan_out_select.html',active='scan',items=order(items,'expiry'),q=request.args.get('q',''))
 @app.get('/scan/out/item/<int:i>')
 def scanout_item(i):
  with db() as c:
-  chosen=c.execute('SELECT p.id product_id,p.name,p.brand,p.type,p.barcode,i.* FROM inventory i JOIN products p ON p.id=i.product_id WHERE i.id=?',(i,)).fetchone()
-  batches=[]
-  if chosen:
-   batches=c.execute('SELECT p.id product_id,p.name,p.brand,p.type,p.barcode,i.* FROM inventory i JOIN products p ON p.id=i.product_id WHERE p.id=? AND i.quantity>0 ORDER BY CASE WHEN i.expiry IS NULL THEN 1 ELSE 0 END,i.expiry',(chosen['product_id'],)).fetchall()
+  chosen=c.execute('SELECT p.id product_id,p.name,p.brand,p.type,p.barcode,i.* FROM inventory i JOIN products p ON p.id=i.product_id WHERE i.id=?',(i,)).fetchone();batches=[]
+  if chosen:batches=c.execute('SELECT p.id product_id,p.name,p.brand,p.type,p.barcode,i.* FROM inventory i JOIN products p ON p.id=i.product_id WHERE p.id=? AND i.quantity>0 ORDER BY CASE WHEN i.expiry IS NULL THEN 1 ELSE 0 END,i.expiry',(chosen['product_id'],)).fetchall()
  return render_template('scan_out_item.html',active='scan',item=chosen,rows=batches)
 @app.get('/scan/out')
 def scanout():
@@ -295,4 +295,4 @@ def warning():
  with db() as c:c.execute("INSERT INTO settings VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(request.form['days'],))
  return redirect('/more')
 @app.get('/health')
-def health():return {'status':'ok','version':'0.6.9'}
+def health():return {'status':'ok','version':'0.6.9.1'}
