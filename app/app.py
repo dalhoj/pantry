@@ -115,6 +115,22 @@ def scanin():
  suggested_type=pdata.get('type') or 'Andet'
  rec_loc,rec_reason=recommended_location(suggested_type,pdata)
  return render_template('scan_in.html',active='scan',barcode=b,product=pdata,locations=locs(),product_types=product_types(),recommended_location=rec_loc,recommendation_reason=rec_reason,is_unknown=bool(b and not pdata.get('name')))
+@app.get('/scan/out/select')
+def scanout_select():
+ q=request.args.get('q','').strip().lower()
+ items=rows()
+ if q:
+  items=[x for x in items if q in ' '.join(str(x[k] or '') for k in ['name','brand','type','variant','location']).lower()]
+ # One searchable inventory list; manual products work exactly like scanned products.
+ return render_template('scan_out_select.html',active='scan',items=order(items,'expiry'),q=request.args.get('q',''))
+@app.get('/scan/out/item/<int:i>')
+def scanout_item(i):
+ with db() as c:
+  chosen=c.execute('SELECT p.id product_id,p.name,p.brand,p.type,p.barcode,i.* FROM inventory i JOIN products p ON p.id=i.product_id WHERE i.id=?',(i,)).fetchone()
+  batches=[]
+  if chosen:
+   batches=c.execute('SELECT p.id product_id,p.name,p.brand,p.type,p.barcode,i.* FROM inventory i JOIN products p ON p.id=i.product_id WHERE p.id=? AND i.quantity>0 ORDER BY CASE WHEN i.expiry IS NULL THEN 1 ELSE 0 END,i.expiry',(chosen['product_id'],)).fetchall()
+ return render_template('scan_out_item.html',active='scan',item=chosen,rows=batches)
 @app.get('/scan/out')
 def scanout():
  b=request.args.get('barcode','');r=[]
@@ -279,4 +295,4 @@ def warning():
  with db() as c:c.execute("INSERT INTO settings VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(request.form['days'],))
  return redirect('/more')
 @app.get('/health')
-def health():return {'status':'ok','version':'0.6.8'}
+def health():return {'status':'ok','version':'0.6.9'}
