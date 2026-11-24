@@ -188,7 +188,8 @@ def edit(i):
   f=request.form;no=f.get('no_expiry')=='1';exp=None if no else f.get('expiry') or None
   with db() as c:c.execute('UPDATE products SET name=?,brand=?,type=?,variant=?,default_location=?,no_expiry_default=?,minimum_stock=? WHERE id=?',(f['name'],f.get('brand',''),f['type'],f.get('variant',''),f['location'],int(no),int(f['minimum_stock']) if f.get('minimum_stock') else None,r['id']));c.execute('UPDATE inventory SET quantity=?,expiry=?,location=? WHERE id=?',(int(f['quantity']),exp,f['location'],i))
   flash('Lagerpost gemt','success');return redirect(f.get('return_to','/'))
- return render_template('edit.html',active='home',item=r,locations=locs(),return_to=request.args.get('return_to','/'))
+ suggested_type=kind(r['name'],r['category'] or '')
+ return render_template('edit.html',active='home',item=r,locations=locs(),product_types=product_types(),suggested_type=suggested_type,return_to=request.args.get('return_to','/'))
 @app.post('/inventory/<int:i>/delete')
 def delete(i):
  with db() as c:c.execute('DELETE FROM inventory WHERE id=?',(i,))
@@ -227,6 +228,44 @@ def statistics():
   elif h['action']=='DISCARD':sums['discarded']+=qty;waste[typ]=waste.get(typ,0)+qty
  filtered=[h for h in history if action_filter=='all' or h['action']==action_filter]
  return render_template('statistics.html',active='more',period=period,action_filter=action_filter,sums=sums,stock=stock,consumption=sorted(consumption.items(),key=lambda x:-x[1]),waste=sorted(waste.items(),key=lambda x:-x[1]),history=filtered)
+@app.route('/manage/product-types',methods=['GET','POST'])
+def manage_product_types():
+ if request.method=='POST':
+  name=request.form.get('name','').strip();default_location=request.form.get('default_location') or None;icon=request.form.get('icon_key','box').strip() or 'box'
+  if name:
+   with db() as c:c.execute('INSERT OR IGNORE INTO product_types(name,default_location,icon_key,sort_order) VALUES(?,?,?,1000)',(name,default_location,icon))
+  return redirect('/manage/product-types')
+ stats=[]
+ with db() as c:
+  for t in product_types():
+   count=c.execute('SELECT COUNT(*) n FROM products WHERE type=?',(t['name'],)).fetchone()['n']
+   stats.append({'id':t['id'],'name':t['name'],'default_location':t['default_location'],'icon_key':t['icon_key'],'sort_order':t['sort_order'],'products':count})
+ return render_template('manage_product_types.html',active='more',types=stats,locations=locs())
+@app.post('/manage/product-types/<int:i>/update')
+def update_product_type(i):
+ new=request.form.get('name','').strip();loc=request.form.get('default_location') or None;icon=request.form.get('icon_key','box').strip() or 'box'
+ with db() as c:
+  old=c.execute('SELECT name FROM product_types WHERE id=?',(i,)).fetchone()
+  if old and new:
+   if old['name']!=new:c.execute('UPDATE products SET type=? WHERE type=?',(new,old['name']))
+   c.execute('UPDATE product_types SET name=?,default_location=?,icon_key=? WHERE id=?',(new,loc,icon,i))
+ return redirect('/manage/product-types')
+@app.post('/manage/product-types/<int:i>/delete')
+def delete_product_type(i):
+ target=request.form.get('target','').strip()
+ with db() as c:
+  old=c.execute('SELECT name FROM product_types WHERE id=?',(i,)).fetchone()
+  count=c.execute('SELECT COUNT(*) n FROM products WHERE type=?',(old['name'],)).fetchone()['n'] if old else 0
+  if old and count and target:
+   c.execute('UPDATE products SET type=? WHERE type=?',(target,old['name']));c.execute('DELETE FROM product_types WHERE id=?',(i,))
+  elif old and count==0:c.execute('DELETE FROM product_types WHERE id=?',(i,))
+ return redirect('/manage/product-types')
+@app.post('/manage/product-types/reorder')
+def reorder_product_types():
+ ids=(request.get_json(silent=True) or {}).get('ids',[])
+ with db() as c:
+  for index,pid in enumerate(ids):c.execute('UPDATE product_types SET sort_order=? WHERE id=?',((index+1)*10,int(pid)))
+ return {'status':'ok'}
 @app.get('/more')
 def more():return render_template('more.html',active='more',warning=setting('expiry_warning_days','7'))
 @app.post('/manage/locations/reorder')
@@ -240,4 +279,4 @@ def warning():
  with db() as c:c.execute("INSERT INTO settings VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(request.form['days'],))
  return redirect('/more')
 @app.get('/health')
-def health():return {'status':'ok','version':'0.6.7'}
+def health():return {'status':'ok','version':'0.6.8'}
