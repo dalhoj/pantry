@@ -1,9 +1,11 @@
 import os, sqlite3, uuid
 from datetime import date, datetime, timedelta
 import requests
-from flask import Flask, flash, redirect, render_template, request, url_for
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import Flask, flash, redirect, render_template, request, url_for, session
 DATA=os.getenv('PANTRY_DATA_DIR','/data'); DB=os.path.join(DATA,'pantry.db'); os.makedirs(DATA,exist_ok=True)
-app=Flask(__name__); app.secret_key=os.getenv('SECRET_KEY','change-me'); OFF='https://world.openfoodfacts.org/api/v2/product/{}'
+app=Flask(__name__); app.secret_key=os.getenv('SECRET_KEY','change-me'); app.config.update(SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',SESSION_COOKIE_SECURE=os.getenv('PANTRY_COOKIE_SECURE','true').lower()=='true',PERMANENT_SESSION_LIFETIME=timedelta(days=int(os.getenv('PANTRY_REMEMBER_DAYS','30')))); OFF='https://world.openfoodfacts.org/api/v2/product/{}'
 def db(): c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 def now(): return datetime.now().isoformat(timespec='seconds')
 def kind(n,c=''):
@@ -80,6 +82,52 @@ def maybe_shop(c,pid,name,typ):
  return False
 
 init()
+def pin_hash(): return setting('pin_hash','')
+def authenticated(): return bool(session.get('pantry_authenticated'))
+@app.before_request
+def require_pantry_login():
+ endpoint=request.endpoint or ''
+ public={'health','auth_login','auth_setup','static'}
+ if endpoint in public or endpoint.startswith('static'):return None
+ configured=bool(pin_hash())
+ if not configured:return redirect('/auth/setup')
+ if not authenticated():return redirect('/auth/login?next='+request.path)
+@app.route('/auth/setup',methods=['GET','POST'])
+def auth_setup():
+ if pin_hash():return redirect('/auth/login')
+ if request.method=='POST':
+  pin=request.form.get('pin','').strip();confirm=request.form.get('confirm','').strip()
+  if not pin.isdigit() or len(pin)<4 or len(pin)>12:flash('Koden skal være 4-12 cifre','error')
+  elif pin!=confirm:flash('Koderne er ikke ens','error')
+  else:
+   with db() as c:c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('pin_hash',?)",(generate_password_hash(pin),))
+   session.clear();session['pantry_authenticated']=True;session.permanent=True;flash('Pantry er nu beskyttet','success');return redirect('/')
+ return render_template('auth_setup.html',auth_page=True)
+@app.route('/auth/login',methods=['GET','POST'])
+def auth_login():
+ if not pin_hash():return redirect('/auth/setup')
+ if request.method=='POST':
+  pin=request.form.get('pin','').strip();remember=request.form.get('remember')=='1'
+  if check_password_hash(pin_hash(),pin):
+   session.clear();session['pantry_authenticated']=True;session.permanent=remember
+   target=request.form.get('next','/')
+   if not target.startswith('/'):target='/'
+   return redirect(target)
+  flash('Forkert kode','error')
+ return render_template('auth_login.html',next=request.args.get('next','/'),auth_page=True)
+@app.post('/auth/logout')
+def auth_logout(): session.clear();return redirect('/auth/login')
+@app.route('/security',methods=['GET','POST'])
+def security():
+ if request.method=='POST':
+  current=request.form.get('current','');new=request.form.get('new','').strip();confirm=request.form.get('confirm','').strip()
+  if not check_password_hash(pin_hash(),current):flash('Nuværende kode er forkert','error')
+  elif not new.isdigit() or len(new)<4 or len(new)>12:flash('Ny kode skal være 4-12 cifre','error')
+  elif new!=confirm:flash('De nye koder er ikke ens','error')
+  else:
+   with db() as c:c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('pin_hash',?)",(generate_password_hash(new),))
+   flash('Adgangskoden er ændret','success');return redirect('/security')
+ return render_template('security.html',active='more',remember_days=app.permanent_session_lifetime.days)
 @app.context_processor
 def ctx():return {'dleft':dleft,'shopcount':shopcount()}
 def rows(loc=''):
@@ -295,4 +343,4 @@ def warning():
  with db() as c:c.execute("INSERT INTO settings VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(request.form['days'],))
  return redirect('/more')
 @app.get('/health')
-def health():return {'status':'ok','version':'0.6.9.1'}
+def health():return {'status':'ok','version':'0.7.0'}
