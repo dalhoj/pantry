@@ -25,7 +25,12 @@ def init():
   hc={x[1] for x in c.execute('PRAGMA table_info(history)')}
   if 'product_type' not in hc:c.execute('ALTER TABLE history ADD COLUMN product_type TEXT')
   if 'location' not in hc:c.execute('ALTER TABLE history ADD COLUMN location TEXT')
-  for n,o in [('Køleskab',10),('Fryser',20),('Skab',30),('Viktualierum',40),('Andet',50)]:c.execute('INSERT OR IGNORE INTO locations(name,sort_order) VALUES(?,?)',(n,o))
+  initialized=c.execute("SELECT value FROM settings WHERE key='locations_initialized'").fetchone()
+  if not initialized:
+   existing=c.execute('SELECT COUNT(*) n FROM locations').fetchone()['n']
+   if existing==0:
+    for n,o in [('Køleskab',10),('Fryser',20),('Skab',30),('Viktualierum',40),('Andet',50)]:c.execute('INSERT OR IGNORE INTO locations(name,sort_order) VALUES(?,?)',(n,o))
+   c.execute("INSERT OR REPLACE INTO settings VALUES('locations_initialized','true')")
   c.execute("INSERT OR IGNORE INTO settings VALUES('expiry_warning_days','7')")
 def log(c,a,pid,iid,n,q=0,d='',typ='',loc=''):c.execute('INSERT INTO history(action,product_id,inventory_id,name,quantity_change,details,created_at,product_type,location) VALUES(?,?,?,?,?,?,?,?,?)',(a,pid,iid,n,q,d,now(),typ,loc))
 def locs():
@@ -106,7 +111,12 @@ def manage():
   if n:
    with db() as c:c.execute('INSERT OR IGNORE INTO locations(name,sort_order) VALUES(?,100)',(n,))
   return redirect('/manage/locations')
- return render_template('manage.html',active='more',locations=locs())
+ stats=[]
+ with db() as c:
+  for loc in locs():
+   r=c.execute('SELECT COUNT(*) products,COALESCE(SUM(quantity),0) units FROM inventory WHERE location=? AND quantity>0',(loc['name'],)).fetchone()
+   stats.append({'id':loc['id'],'name':loc['name'],'sort_order':loc['sort_order'],'products':r['products'],'units':r['units']})
+ return render_template('manage.html',active='more',locations=stats)
 @app.post('/manage/locations/<int:i>/rename')
 def rename(i):
  new=request.form.get('name','').strip()
@@ -196,9 +206,15 @@ def statistics():
  return render_template('statistics.html',active='more',period=period,action_filter=action_filter,sums=sums,stock=stock,consumption=sorted(consumption.items(),key=lambda x:-x[1]),waste=sorted(waste.items(),key=lambda x:-x[1]),history=filtered)
 @app.get('/more')
 def more():return render_template('more.html',active='more',warning=setting('expiry_warning_days','7'))
+@app.post('/manage/locations/reorder')
+def reorder_locations():
+ ids=(request.get_json(silent=True) or {}).get('ids',[])
+ with db() as c:
+  for index,lid in enumerate(ids):c.execute('UPDATE locations SET sort_order=? WHERE id=?',((index+1)*10,int(lid)))
+ return {'status':'ok'}
 @app.post('/settings/warning')
 def warning():
  with db() as c:c.execute("INSERT INTO settings VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(request.form['days'],))
  return redirect('/more')
 @app.get('/health')
-def health():return {'status':'ok','version':'0.6.5'}
+def health():return {'status':'ok','version':'0.6.6'}

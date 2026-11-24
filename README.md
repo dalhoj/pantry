@@ -1,12 +1,8 @@
-# Pantry v0.6.5
-
-Additiv opdatering oven på v0.6.4 More-fix. Ingen eksisterende funktioner, routes eller databasetabeller er fjernet.
-
-Nyt:
-- PANTRY/versionsteksten er fjernet fra toppen af alle sider for at frigive lodret plads.
-- Versionen findes fortsat under Mere.
-- Valgt statistikperiode (Uge/Måned/År) har nu tydelig grøn aktiv markering med mørk tekst.
-- Valgt historikfilter (Alle/Tilføjet/Brugt/Kasseret) markeres på samme måde.
-- Mere-layoutrettelsen er bevaret.
-
-TrueNAS image: ghcr.io/dalhoj/pantry:0.6.5
+# Pantry v0.6.6
+Additiv patch oven på v0.6.5. Alt eksisterende bevares.
+- Standardplaceringer initialiseres kun én gang via settings.locations_initialized.
+- Omdøbte og slettede standardplaceringer genskabes ikke ved opgraderinger.
+- Drag & drop rækkefølge med touch og mus under Mere > Placeringer.
+- Rækkefølgen gemmes permanent i locations.sort_order og bruges af eksisterende placeringslister/dropdowns.
+- Administrér placeringer viser antal lagerposter og enheder.
+- Eksisterende omdøb, flyt og slet bevares.
