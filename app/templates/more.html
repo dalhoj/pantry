@@ -1,1 +1,44 @@
-{% extends 'base.html' %}{% block body %}<main><small>MERE</small><h1>Indstillinger</h1><a class="settinglink" href="/manage/locations"><div class="settingtext"><b>Placeringer</b><span>Tilføj, omdøb eller slet</span></div><strong>›</strong></a><a class="settinglink" href="/statistics"><div class="settingtext"><b>Historik og statistik</b><span>Forbrug, tilføjelser og kassation</span></div><strong>›</strong></a><section class="settings"><h2>Holdbarhedsvarsel</h2><form method="post" action="/settings/warning" class="warningchoices">{% for d in [3,5,7,14] %}<button name="days" value="{{d}}" class="{{'selected' if warning==d|string}}">{{d}} dage</button>{% endfor %}</form></section><div class="settings meta-settings"><article><b>Version</b><span>0.6.4 complete</span></article><article><b>Data</b><span>Gemmes lokalt på TrueNAS</span></article></div></main>{% endblock %}
+{% extends 'base.html' %}{% block body %}
+<main class="more-page">
+  <small>MERE</small>
+  <h1>Indstillinger</h1>
+
+  <div class="more-links">
+    <a class="more-link-card" href="/manage/locations">
+      <div class="more-link-copy">
+        <b>Placeringer</b>
+        <span>Tilføj, omdøb eller slet</span>
+      </div>
+      <strong aria-hidden="true">›</strong>
+    </a>
+
+    <a class="more-link-card" href="/statistics">
+      <div class="more-link-copy">
+        <b>Historik og statistik</b>
+        <span>Forbrug, tilføjelser og kassation</span>
+      </div>
+      <strong aria-hidden="true">›</strong>
+    </a>
+  </div>
+
+  <section class="more-section">
+    <h2>Holdbarhedsvarsel</h2>
+    <form method="post" action="/settings/warning" class="warningchoices">
+      {% for d in [3,5,7,14] %}
+      <button name="days" value="{{d}}" class="{{'selected' if warning==d|string}}">{{d}} dage</button>
+      {% endfor %}
+    </form>
+  </section>
+
+  <section class="more-section more-meta">
+    <div class="more-meta-row">
+      <b>Version</b>
+      <span>0.6.4 complete</span>
+    </div>
+    <div class="more-meta-row">
+      <b>Data</b>
+      <span>Gemmes lokalt på TrueNAS</span>
+    </div>
+  </section>
+</main>
+{% endblock %}
