@@ -64,7 +64,7 @@ def home():
  for x in r:g.setdefault(x['type'],[]).append(x)
  groups=[]
  for typ,it in g.items():
-  dates=[x['expiry'] for x in it if x['expiry']];groups.append({'type':typ,'items':it,'total':sum(x['quantity'] for x in it),'next_expiry':min(dates) if dates else None})
+  dates=[x['expiry'] for x in it if x['expiry']];groups.append({'type':typ,'batches':it,'total':sum(x['quantity'] for x in it),'next_expiry':min(dates) if dates else None})
  w=int(setting('expiry_warning_days','7'));soon=sorted([x for x in r if x['expiry'] and dleft(x['expiry'])<=w],key=lambda x:x['expiry'])[:5]
  return render_template('index.html',active='home',groups=groups,q=request.args.get('q',''),sort=s,total=sum(x['quantity'] for x in r),soon=soon,warning=w)
 @app.get('/locations')
