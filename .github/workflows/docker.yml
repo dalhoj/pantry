@@ -18,4 +18,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/dalhoj/pantry:latest
-            ghcr.io/dalhoj/pantry:0.6.9.1
+            ghcr.io/dalhoj/pantry:0.7.0
