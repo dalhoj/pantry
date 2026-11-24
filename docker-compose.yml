@@ -1,6 +1,6 @@
 services:
   pantry:
-    image: ghcr.io/dalhoj/pantry:0.6.2
+    image: ghcr.io/dalhoj/pantry:0.6.3
     container_name: pantry
     restart: unless-stopped
     ports: ["8180:8080"]
