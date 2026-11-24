@@ -130,6 +130,21 @@ def manual():
   with db() as c:c.execute('INSERT INTO products(barcode,name,brand,type,variant,category,default_location,no_expiry_default,minimum_stock,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(b,n,f.get('brand',''),t,f.get('variant',''),'manual',f['location'],int(no),int(f['minimum_stock']) if f.get('minimum_stock') else None,now()));pid=c.execute('SELECT last_insert_rowid()id').fetchone()['id'];c.execute('INSERT INTO inventory(product_id,quantity,expiry,location,created_at) VALUES(?,?,?,?,?)',(pid,int(f.get('quantity',1)),exp,f['location'],now()))
   return redirect('/')
  return render_template('manual.html',active='scan',locations=locs())
+@app.post('/inventory/add')
+def add_scanned():
+ f=request.form;b=f['barcode'];n=f['name'].strip();t=f.get('type','').strip() or kind(n);no=f.get('no_expiry')=='1';exp=None if no else (f.get('expiry') or None);q=max(1,int(f.get('quantity',1)));loc=f['location']
+ with db() as c:
+  c.execute('INSERT OR IGNORE INTO products(barcode,name,brand,type,variant,category,default_location,no_expiry_default,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(b,n,f.get('brand',''),t,f.get('variant',''),f.get('category',''),loc,int(no),now()))
+  c.execute('UPDATE products SET name=?,brand=?,type=?,variant=?,category=?,default_location=?,no_expiry_default=? WHERE barcode=?',(n,f.get('brand',''),t,f.get('variant',''),f.get('category',''),loc,int(no),b))
+  pid=c.execute('SELECT id FROM products WHERE barcode=?',(b,)).fetchone()['id']
+  batch=c.execute('SELECT id FROM inventory WHERE product_id=? AND expiry IS ? AND location=?',(pid,exp,loc)).fetchone()
+  if batch:
+   iid=batch['id'];c.execute('UPDATE inventory SET quantity=quantity+? WHERE id=?',(q,iid))
+  else:
+   c.execute('INSERT INTO inventory(product_id,quantity,expiry,location,created_at) VALUES(?,?,?,?,?)',(pid,q,exp,loc,now()));iid=c.execute('SELECT last_insert_rowid()id').fetchone()['id']
+  log(c,'SCAN_IN',pid,iid,n,q,'Scan ind')
+ flash(f'{n} tilføjet til lageret','success')
+ return redirect('/')
 @app.route('/inventory/<int:i>/edit',methods=['GET','POST'])
 def edit(i):
  with db() as c:r=c.execute('SELECT p.*,i.id iid,i.quantity,i.expiry,i.location FROM inventory i JOIN products p ON p.id=i.product_id WHERE i.id=?',(i,)).fetchone()
