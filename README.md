@@ -1,17 +1,12 @@
-# Pantry v0.6.4 complete
+# Pantry v0.6.5
 
-Bygget direkte oven på den stabile v0.6.3.1. Alle eksisterende routes og funktioner er bevaret:
-- klikbare placeringer og placeringsdetaljer
-- Scan ind, Scan ud og manuel tilføjelse
-- indkøbsliste
-- Administrér placeringer med omdøb, flyt og slet
-- Manuel redigering og sletning af lagerposter
-- foldbare produktgrupper, toast-feedback og samlet lagerlogik
+Additiv opdatering oven på v0.6.4 More-fix. Ingen eksisterende funktioner, routes eller databasetabeller er fjernet.
 
 Nyt:
-- +/- antal ved manuel tilføjelse og Scan ind
-- ens holdbarhedskomponent med dato først og tydelig Ingen holdbarhedsdato-knap
-- Historik og statistik under Mere
-- uge, måned og år
-- tilføjet, taget i brug, kasseret og lager nu
-- forbrug og kassation efter produkttype
+- PANTRY/versionsteksten er fjernet fra toppen af alle sider for at frigive lodret plads.
+- Versionen findes fortsat under Mere.
+- Valgt statistikperiode (Uge/Måned/År) har nu tydelig grøn aktiv markering med mørk tekst.
+- Valgt historikfilter (Alle/Tilføjet/Brugt/Kasseret) markeres på samme måde.
+- Mere-layoutrettelsen er bevaret.
+
+TrueNAS image: ghcr.io/dalhoj/pantry:0.6.5
