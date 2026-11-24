@@ -7,10 +7,12 @@ app=Flask(__name__); app.secret_key=os.getenv('SECRET_KEY','change-me'); OFF='ht
 def db(): c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
 def now(): return datetime.now().isoformat(timespec='seconds')
 def kind(n,c=''):
- s=(n+' '+c).lower(); rules=[('Mayonnaise',['mayo']),('Mælk',['mælk','milk']),('Ost',['ost','cheese']),('Smør',['smør','butter']),('Æg',['æg','egg']),('Pasta',['pasta']),('Ris',['ris','rice']),('Brød',['brød','bread']),('Drikkevarer',['juice','cola','sodavand','vand']),('Rengøring',['opvask','sæbe','soap']),('Kød',['kød','meat']),('Fisk',['fisk','fish']),('Frugt',['frugt','fruit']),('Grøntsager',['kartoff','grønt','vegetable'])]
+ s=(n+' '+c).lower()
+ rules=[('Dåsemad',['makrel i tomat','tun i dåse','tuna','canned','konserv','dåse']),('Tørvarer / Kolonial',['mel','flour','sukker','sugar','havregryn','oats','linser','lentil','bagepulver']),('Saucer & dressinger',['mayonnaise','mayo','ketchup','sennep','mustard','dressing']),('Mælk',['mælk','milk']),('Ost',['ost','cheese']),('Smør',['smør','butter']),('Æg',['æg','egg']),('Pasta',['pasta','spaghetti','penne']),('Ris',['ris','rice']),('Brød',['brød','bread']),('Frostvarer',['frost','frozen']),('Drikkevarer',['juice','cola','sodavand','vand','water']),('Rengøring',['rengøring','cleaner']),('Opvask',['opvask','dishwash']),('Kød',['kød','meat','beef','chicken']),('Fisk',['fisk','fish']),('Frugt',['frugt','fruit','apple']),('Grøntsager',['kartoff','grønt','vegetable','carrot'])]
  for k,ws in rules:
-  if any(w in s for w in ws): return k
- return (c.split(',')[0].strip() if c else 'Andet') or 'Andet'
+  if any(w in s for w in ws):return k
+ return 'Andet'
+
 def init():
  with db() as c:
   c.execute('CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY,barcode TEXT UNIQUE,name TEXT NOT NULL,brand TEXT,type TEXT NOT NULL,variant TEXT,category TEXT,default_location TEXT,created_at TEXT NOT NULL)')
@@ -18,6 +20,13 @@ def init():
   pc={x[1] for x in c.execute('PRAGMA table_info(products)')}
   if 'no_expiry_default' not in pc:c.execute('ALTER TABLE products ADD COLUMN no_expiry_default INTEGER NOT NULL DEFAULT 0')
   if 'minimum_stock' not in pc:c.execute('ALTER TABLE products ADD COLUMN minimum_stock INTEGER')
+  if 'source' not in pc:c.execute("ALTER TABLE products ADD COLUMN source TEXT NOT NULL DEFAULT 'local'")
+  c.execute('CREATE TABLE IF NOT EXISTS product_types(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE NOT NULL,default_location TEXT,icon_key TEXT,sort_order INTEGER NOT NULL DEFAULT 0)')
+  type_init=c.execute("SELECT value FROM settings WHERE key='product_types_initialized'").fetchone()
+  if not type_init:
+   defaults=[('Mælk','Køleskab','milk',10),('Ost','Køleskab','cheese',20),('Smør','Køleskab','butter',30),('Æg','Køleskab','eggs',40),('Yoghurt / syrnede produkter','Køleskab','milk',50),('Pålæg','Køleskab','meat',60),('Kød','Køleskab','meat',70),('Fisk','Køleskab','fish',80),('Frugt','Skab','fruit',90),('Grøntsager','Skab','veg',100),('Brød','Skab','bread',110),('Dåsemad','Skab','box',120),('Tørvarer / Kolonial','Skab','box',130),('Pasta','Skab','pasta',140),('Ris','Skab','rice',150),('Morgenmad','Skab','box',160),('Krydderier','Skab','box',170),('Saucer & dressinger','Skab','mayo',180),('Snacks','Skab','box',190),('Slik','Skab','box',200),('Drikkevarer','Skab','drink',210),('Frostvarer','Fryser','box',220),('Opvask','Skab','soap',230),('Rengøring','Skab','soap',240),('Vaskemiddel','Skab','soap',250),('Sæbe & personlig pleje','Skab','soap',260),('Papirvarer','Skab','box',270),('Husholdningsartikler','Skab','box',280),('Andet','Andet','box',999)]
+   for n,l,i,o in defaults:c.execute('INSERT OR IGNORE INTO product_types(name,default_location,icon_key,sort_order) VALUES(?,?,?,?)',(n,l,i,o))
+   c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('product_types_initialized','true')")
   c.execute('CREATE TABLE IF NOT EXISTS shopping(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,type TEXT,product_id INTEGER,quantity INTEGER NOT NULL DEFAULT 1,checked INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)')
   c.execute('CREATE TABLE IF NOT EXISTS locations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0)')
   c.execute('CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
@@ -35,6 +44,17 @@ def init():
 def log(c,a,pid,iid,n,q=0,d='',typ='',loc=''):c.execute('INSERT INTO history(action,product_id,inventory_id,name,quantity_change,details,created_at,product_type,location) VALUES(?,?,?,?,?,?,?,?,?)',(a,pid,iid,n,q,d,now(),typ,loc))
 def locs():
  with db() as c:return c.execute('SELECT * FROM locations ORDER BY sort_order,name').fetchall()
+def product_types():
+ with db() as c:return c.execute('SELECT * FROM product_types ORDER BY sort_order,name').fetchall()
+def recommended_location(type_name,product=None):
+ if product and product.get('default_location') and any(l['name']==product.get('default_location') for l in locs()):return product.get('default_location'),'Husket fra tidligere'
+ with db() as c:r=c.execute('SELECT default_location FROM product_types WHERE name=?',(type_name,)).fetchone()
+ candidate=r['default_location'] if r else None
+ available=[l['name'] for l in locs()]
+ if candidate in available:return candidate,'Foreslået ud fra produkttypen'
+ # Never recreate locations; use a best existing fallback.
+ if available:return available[0],'Foreslået placering'
+ return '',''
 def dleft(x):
  if not x:return None
  try:return (datetime.strptime(x,'%Y-%m-%d').date()-date.today()).days
@@ -45,7 +65,7 @@ def shopcount():
  with db() as c:return c.execute('SELECT COALESCE(SUM(quantity),0)n FROM shopping WHERE checked=0').fetchone()['n']
 def lookup(b):
  try:
-  j=requests.get(OFF.format(b),params={'fields':'product_name,product_name_da,brands,categories'},headers={'User-Agent':'Pantry/0.6.3'},timeout=8).json();p=j.get('product',{});n=p.get('product_name_da') or p.get('product_name') or '';cat=(p.get('categories') or '').split(',')[0].strip();return {'name':n,'brand':p.get('brands') or '','type':kind(n,cat),'category':cat,'variant':''} if j.get('status')==1 else {}
+  j=requests.get(OFF.format(b),params={'fields':'product_name,product_name_da,brands,categories'},headers={'User-Agent':'Pantry/0.6.3'},timeout=8).json();p=j.get('product',{});n=p.get('product_name_da') or p.get('product_name') or '';cat=(p.get('categories') or '').split(',')[0].strip();return {'name':n,'brand':p.get('brands') or '','type':kind(n,cat),'category':cat,'variant':'','source':'openfoodfacts'} if j.get('status')==1 else {}
  except:return {}
 def total_for_type(c,typ): return c.execute('SELECT COALESCE(SUM(i.quantity),0)n FROM inventory i JOIN products p ON p.id=i.product_id WHERE p.type=?',(typ,)).fetchone()['n']
 def maybe_shop(c,pid,name,typ):
@@ -91,7 +111,10 @@ def scanin():
  if b:
   with db() as c:p=c.execute('SELECT * FROM products WHERE barcode=?',(b,)).fetchone()
   p=dict(p) if p else lookup(b)
- return render_template('scan_in.html',active='scan',barcode=b,product=p,locations=locs())
+ pdata=dict(p) if p else {}
+ suggested_type=pdata.get('type') or 'Andet'
+ rec_loc,rec_reason=recommended_location(suggested_type,pdata)
+ return render_template('scan_in.html',active='scan',barcode=b,product=pdata,locations=locs(),product_types=product_types(),recommended_location=rec_loc,recommendation_reason=rec_reason,is_unknown=bool(b and not pdata.get('name')))
 @app.get('/scan/out')
 def scanout():
  b=request.args.get('barcode','');r=[]
@@ -142,13 +165,13 @@ def manual():
   f=request.form;b='manual-'+uuid.uuid4().hex;n=f['name'];t=f['type'] or kind(n);no=f.get('no_expiry')=='1';exp=None if no else f.get('expiry') or None
   with db() as c:c.execute('INSERT INTO products(barcode,name,brand,type,variant,category,default_location,no_expiry_default,minimum_stock,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(b,n,f.get('brand',''),t,f.get('variant',''),'manual',f['location'],int(no),int(f['minimum_stock']) if f.get('minimum_stock') else None,now()));pid=c.execute('SELECT last_insert_rowid()id').fetchone()['id'];c.execute('INSERT INTO inventory(product_id,quantity,expiry,location,created_at) VALUES(?,?,?,?,?)',(pid,int(f.get('quantity',1)),exp,f['location'],now()))
   return redirect('/')
- return render_template('manual.html',active='scan',locations=locs())
+ return render_template('manual.html',active='scan',locations=locs(),product_types=product_types())
 @app.post('/inventory/add')
 def add_scanned():
  f=request.form;b=f['barcode'];n=f['name'].strip();t=f.get('type','').strip() or kind(n);no=f.get('no_expiry')=='1';exp=None if no else (f.get('expiry') or None);q=max(1,int(f.get('quantity',1)));loc=f['location']
  with db() as c:
-  c.execute('INSERT OR IGNORE INTO products(barcode,name,brand,type,variant,category,default_location,no_expiry_default,created_at) VALUES(?,?,?,?,?,?,?,?,?)',(b,n,f.get('brand',''),t,f.get('variant',''),f.get('category',''),loc,int(no),now()))
-  c.execute('UPDATE products SET name=?,brand=?,type=?,variant=?,category=?,default_location=?,no_expiry_default=? WHERE barcode=?',(n,f.get('brand',''),t,f.get('variant',''),f.get('category',''),loc,int(no),b))
+  c.execute('INSERT OR IGNORE INTO products(barcode,name,brand,type,variant,category,default_location,no_expiry_default,created_at,source) VALUES(?,?,?,?,?,?,?,?,?,?)',(b,n,f.get('brand',''),t,f.get('variant',''),f.get('category',''),loc,int(no),now(),f.get('source','local')))
+  c.execute("UPDATE products SET name=?,brand=?,type=?,variant=?,category=?,default_location=?,no_expiry_default=?,source='local' WHERE barcode=?",(n,f.get('brand',''),t,f.get('variant',''),f.get('category',''),loc,int(no),b))
   pid=c.execute('SELECT id FROM products WHERE barcode=?',(b,)).fetchone()['id']
   batch=c.execute('SELECT id FROM inventory WHERE product_id=? AND expiry IS ? AND location=?',(pid,exp,loc)).fetchone()
   if batch:
@@ -217,4 +240,4 @@ def warning():
  with db() as c:c.execute("INSERT INTO settings VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(request.form['days'],))
  return redirect('/more')
 @app.get('/health')
-def health():return {'status':'ok','version':'0.6.6'}
+def health():return {'status':'ok','version':'0.6.7'}
