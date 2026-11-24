@@ -1,24 +1,29 @@
 import os, sqlite3
 from datetime import date, datetime
 import requests
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, redirect, render_template, request, url_for, flash
 DATA=os.getenv('PANTRY_DATA_DIR','/data'); DB=os.path.join(DATA,'pantry.db'); os.makedirs(DATA,exist_ok=True)
 app=Flask(__name__); app.secret_key=os.getenv('SECRET_KEY','change-me'); OFF='https://world.openfoodfacts.org/api/v2/product/{}'
-def db(): c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; return c
+def db():
+ c=sqlite3.connect(DB); c.row_factory=sqlite3.Row; c.execute('PRAGMA foreign_keys=ON'); return c
 def kind(name,cat=''):
  s=(name+' '+cat).lower(); rules=[('Mayonnaise',['mayonnaise','mayo']),('Mælk',['mælk','milk']),('Ost',['ost','cheese']),('Smør',['smør','butter']),('Æg',['æg','egg']),('Pasta',['pasta','spaghetti','penne']),('Ris',['ris','rice']),('Ketchup',['ketchup']),('Sennep',['sennep','mustard']),('Brød',['brød','bread']),('Drikkevarer',['juice','cola','sodavand','vand','water']),('Opvaskemiddel',['opvaskemiddel','dishwashing liquid']),('Opvaskemaskinesalt',['opvaskemaskinesalt','dishwasher salt']),('Sæbe',['sæbe','soap']),('Kød',['kød','meat','beef','chicken']),('Fisk',['fisk','fish']),('Frugt',['frugt','fruit','apple']),('Grøntsager',['grønt','vegetable','carrot'])]
  for k,ws in rules:
   if any(w in s for w in ws): return k
  return (cat.split(',')[0].strip() if cat else 'Andet') or 'Andet'
 def icon_key(t):
- m={'Mayonnaise':'mayo','Mælk':'milk','Ost':'cheese','Smør':'butter','Æg':'eggs','Brød':'bread','Pasta':'pasta','Ris':'rice','Ketchup':'bottle','Sennep':'bottle','Drikkevarer':'drink','Opvaskemiddel':'soap','Opvaskemaskinesalt':'salt','Sæbe':'soap','Kød':'meat','Fisk':'fish','Frugt':'fruit','Grøntsager':'veg'}; return m.get(t,'box')
+ return {'Mayonnaise':'mayo','Mælk':'milk','Ost':'cheese','Smør':'butter','Æg':'eggs','Brød':'bread','Pasta':'pasta','Ris':'rice','Ketchup':'bottle','Sennep':'bottle','Drikkevarer':'drink','Opvaskemiddel':'soap','Opvaskemaskinesalt':'salt','Sæbe':'soap','Kød':'meat','Fisk':'fish','Frugt':'fruit','Grøntsager':'veg'}.get(t,'box')
 def init():
  with db() as c:
   c.execute('CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY,barcode TEXT UNIQUE,name TEXT NOT NULL,brand TEXT,type TEXT NOT NULL,variant TEXT,category TEXT,default_location TEXT,created_at TEXT NOT NULL)')
   c.execute('CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY,product_id INTEGER NOT NULL,quantity INTEGER NOT NULL DEFAULT 1,expiry DATE,location TEXT NOT NULL,created_at TEXT NOT NULL)')
-  cols={x[1] for x in c.execute('PRAGMA table_info(products)')}
-  if 'no_expiry_default' not in cols:c.execute('ALTER TABLE products ADD COLUMN no_expiry_default INTEGER NOT NULL DEFAULT 0')
+  pcols={x[1] for x in c.execute('PRAGMA table_info(products)')}
+  if 'no_expiry_default' not in pcols:c.execute('ALTER TABLE products ADD COLUMN no_expiry_default INTEGER NOT NULL DEFAULT 0')
   c.execute('CREATE TABLE IF NOT EXISTS shopping(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,type TEXT,product_id INTEGER,quantity INTEGER NOT NULL DEFAULT 1,checked INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL)')
+  c.execute('CREATE TABLE IF NOT EXISTS locations(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE NOT NULL,sort_order INTEGER NOT NULL DEFAULT 0)')
+  c.execute('CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+  for n,o in [('Køleskab',10),('Fryser',20),('Skab',30),('Viktualierum',40),('Andet',50)]:c.execute('INSERT OR IGNORE INTO locations(name,sort_order) VALUES(?,?)',(n,o))
+  c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('expiry_warning_days','7')")
   tables={x[0] for x in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
   if 'items' in tables and not c.execute("SELECT 1 FROM products WHERE barcode='__migration_v03__'").fetchone():
    oldcols={x[1] for x in c.execute('PRAGMA table_info(items)')}
@@ -28,33 +33,64 @@ def init():
    c.execute("INSERT INTO products(barcode,name,brand,type,variant,category,created_at) VALUES('__migration_v03__','migration','','System','','',?)",(datetime.now().isoformat(),))
 def lookup(bc):
  try:
-  j=requests.get(OFF.format(bc),params={'fields':'product_name,product_name_da,brands,categories'},headers={'User-Agent':'Pantry/0.5 dalhoj'},timeout=8).json();p=j.get('product',{});n=p.get('product_name_da') or p.get('product_name') or '';cat=(p.get('categories') or '').split(',')[0].strip();return {'name':n,'brand':p.get('brands') or '','category':cat,'type':kind(n,cat),'variant':'','default_location':'','no_expiry_default':0} if j.get('status')==1 else {}
+  j=requests.get(OFF.format(bc),params={'fields':'product_name,product_name_da,brands,categories'},headers={'User-Agent':'Pantry/0.6 dalhoj'},timeout=8).json();p=j.get('product',{});n=p.get('product_name_da') or p.get('product_name') or '';cat=(p.get('categories') or '').split(',')[0].strip();return {'name':n,'brand':p.get('brands') or '','category':cat,'type':kind(n,cat),'variant':'','default_location':'','no_expiry_default':0} if j.get('status')==1 else {}
  except:return {}
 def dleft(exp):
  if not exp:return None
  try:return (datetime.strptime(exp,'%Y-%m-%d').date()-date.today()).days
  except:return None
+def setting(key,default=''):
+ with db() as c:
+  r=c.execute('SELECT value FROM settings WHERE key=?',(key,)).fetchone();return r['value'] if r else default
+def locations():
+ with db() as c:return c.execute('SELECT * FROM locations ORDER BY sort_order,name').fetchall()
 def shopcount():
  with db() as c:return c.execute('SELECT COALESCE(SUM(quantity),0) n FROM shopping WHERE checked=0').fetchone()['n']
 init()
 @app.context_processor
-def helpers():return {'dleft':dleft,'icon_key':icon_key,'shopcount':shopcount()}
+def helpers():return {'dleft':dleft,'icon_key':icon_key,'shopcount':shopcount(),'nav_locations':locations()}
+def inventory_rows(q='',location=''):
+ like=f'%{q}%';args=[];sql="SELECT p.*,i.id iid,i.quantity,i.expiry,i.location FROM products p JOIN inventory i ON p.id=i.product_id WHERE i.quantity>0 AND p.barcode!='__migration_v03__' "
+ if q:sql+='AND (p.type LIKE ? OR p.name LIKE ? OR p.brand LIKE ? OR p.variant LIKE ? OR p.category LIKE ? OR p.barcode LIKE ? OR i.location LIKE ?) ';args += [like]*7
+ if location:sql+='AND i.location=? ';args.append(location)
+ with db() as c:return c.execute(sql,args).fetchall()
+def sort_rows(rows,sort):
+ if sort=='expiry':return sorted(rows,key=lambda r:(r['expiry'] is None,r['expiry'] or '9999'))
+ if sort=='qty_asc':return sorted(rows,key=lambda r:(r['quantity'],r['name'].lower()))
+ if sort=='qty_desc':return sorted(rows,key=lambda r:(-r['quantity'],r['name'].lower()))
+ return sorted(rows,key=lambda r:(r['name'].lower(),r['expiry'] or '9999'))
 @app.get('/')
 def index():
- q=request.args.get('q','').strip();like=f'%{q}%';args=[];sql="SELECT p.*,i.id iid,i.quantity,i.expiry,i.location FROM products p JOIN inventory i ON p.id=i.product_id WHERE i.quantity>0 AND p.barcode!='__migration_v03__' "
- if q:sql+='AND (p.type LIKE ? OR p.name LIKE ? OR p.brand LIKE ? OR p.variant LIKE ? OR p.category LIKE ? OR p.barcode LIKE ? OR i.location LIKE ?) ';args=[like]*7
- sql+='ORDER BY p.type,i.expiry,p.name'
- with db() as c:rows=c.execute(sql,args).fetchall()
- groups={}
+ q=request.args.get('q','').strip();sort=request.args.get('sort','name');rows=sort_rows(inventory_rows(q),sort);groups={}
  for r in rows:groups.setdefault(r['type'],[]).append(r)
- soon=sorted([r for r in rows if r['expiry'] and dleft(r['expiry']) is not None and dleft(r['expiry'])<=7],key=lambda r:r['expiry'])[:5]
- return render_template('index.html',active='home',groups=groups,q=q,total=sum(r['quantity'] for r in rows),soon=soon)
-@app.get('/search')
-def search():return index()
+ warning=int(setting('expiry_warning_days','7'));soon=sorted([r for r in rows if r['expiry'] and dleft(r['expiry']) is not None and dleft(r['expiry'])<=warning],key=lambda r:r['expiry'])[:5]
+ return render_template('index.html',active='home',groups=groups,q=q,sort=sort,total=sum(r['quantity'] for r in rows),soon=soon,warning=warning)
 @app.get('/expiry')
-def expiry():
- with db() as c:rows=c.execute("SELECT p.*,i.id iid,i.quantity,i.expiry,i.location FROM products p JOIN inventory i ON p.id=i.product_id WHERE i.quantity>0 AND i.expiry IS NOT NULL AND i.expiry!='' ORDER BY i.expiry,p.name").fetchall()
- return render_template('expiry.html',active='home',rows=rows)
+def expiry():return render_template('expiry.html',active='home',rows=sort_rows([r for r in inventory_rows() if r['expiry']],'expiry'))
+@app.get('/locations')
+def location_overview():
+ stats=[];warning=int(setting('expiry_warning_days','7'))
+ for loc in locations():
+  rows=inventory_rows(location=loc['name']);stats.append({'name':loc['name'],'products':len(rows),'units':sum(r['quantity'] for r in rows),'soon':sum(1 for r in rows if r['expiry'] and dleft(r['expiry']) is not None and dleft(r['expiry'])<=warning)})
+ return render_template('locations.html',active='locations',stats=stats)
+@app.get('/locations/<path:name>')
+def location_detail(name):
+ sort=request.args.get('sort','name');return render_template('location_detail.html',active='locations',name=name,sort=sort,rows=sort_rows(inventory_rows(location=name),sort))
+@app.get('/type/<path:name>')
+def type_detail(name):return render_template('type_detail.html',active='home',name=name,rows=[r for r in sort_rows(inventory_rows(),'expiry') if r['type']==name])
+@app.route('/inventory/<int:iid>/edit',methods=['GET','POST'])
+def inventory_edit(iid):
+ with db() as c:
+  row=c.execute('SELECT p.*,i.id iid,i.quantity,i.expiry,i.location FROM inventory i JOIN products p ON p.id=i.product_id WHERE i.id=?',(iid,)).fetchone()
+  if request.method=='POST' and row:
+   f=request.form;noexp=f.get('no_expiry')=='1';expiry=None if noexp else(f.get('expiry') or None);qty=max(0,int(f.get('quantity',0)))
+   c.execute('UPDATE products SET name=?,brand=?,type=?,variant=?,default_location=?,no_expiry_default=? WHERE id=?',(f['name'].strip(),f.get('brand',''),f['type'].strip(),f.get('variant',''),f['location'],1 if noexp else 0,row['id']))
+   c.execute('UPDATE inventory SET quantity=?,expiry=?,location=? WHERE id=?',(qty,expiry,f['location'],iid));return redirect(url_for('index'))
+ return render_template('inventory_edit.html',active='home',item=row,locations=locations())
+@app.post('/inventory/<int:iid>/delete')
+def inventory_delete(iid):
+ with db() as c:c.execute('DELETE FROM inventory WHERE id=?',(iid,))
+ return redirect(url_for('index'))
 @app.get('/scan')
 def scan_menu():return render_template('scan_menu.html',active='scan')
 @app.get('/scan/in')
@@ -63,7 +99,7 @@ def scan_in():
  if bc:
   with db() as c:p=c.execute('SELECT * FROM products WHERE barcode=?',(bc,)).fetchone()
   p=dict(p) if p else lookup(bc)
- return render_template('scan_in.html',active='scan',barcode=bc,product=p)
+ return render_template('scan_in.html',active='scan',barcode=bc,product=p,locations=locations())
 @app.post('/inventory/add')
 def add():
  f=request.form;bc=f['barcode'];name=f['name'].strip();typ=f.get('type','').strip() or kind(name);loc=f['location'];noexp=1 if f.get('no_expiry')=='1' else 0;expiry=None if noexp else(f.get('expiry') or None);qty=max(1,int(f.get('quantity',1)))
@@ -95,6 +131,11 @@ def shopping_add():
  if name:
   with db() as c:c.execute('INSERT INTO shopping(name,type,quantity,created_at) VALUES(?,?,?,?)',(name,typ,max(1,int(request.form.get('quantity',1))),datetime.now().isoformat()))
  return redirect(url_for('shopping'))
+@app.post('/shopping/<int:sid>/change')
+def shopping_change(sid):
+ delta=int(request.form.get('delta',0))
+ with db() as c:c.execute('UPDATE shopping SET quantity=MAX(1,quantity+?) WHERE id=?',(delta,sid))
+ return redirect(url_for('shopping'))
 @app.post('/shopping/<int:sid>/toggle')
 def shopping_toggle(sid):
  with db() as c:c.execute('UPDATE shopping SET checked=CASE checked WHEN 1 THEN 0 ELSE 1 END WHERE id=?',(sid,))
@@ -104,6 +145,39 @@ def shopping_delete(sid):
  with db() as c:c.execute('DELETE FROM shopping WHERE id=?',(sid,))
  return redirect(url_for('shopping'))
 @app.get('/more')
-def more():return render_template('more.html',active='more')
+def more():return render_template('more.html',active='more',warning=setting('expiry_warning_days','7'))
+@app.route('/manage/locations',methods=['GET','POST'])
+def manage_locations():
+ if request.method=='POST':
+  name=request.form.get('name','').strip()
+  if name:
+   with db() as c:c.execute('INSERT OR IGNORE INTO locations(name,sort_order) VALUES(?,?)',(name,100))
+  return redirect(url_for('manage_locations'))
+ return render_template('manage_locations.html',active='more',locations=locations())
+@app.post('/manage/locations/<int:lid>/rename')
+def rename_location(lid):
+ new=request.form.get('name','').strip()
+ with db() as c:
+  old=c.execute('SELECT name FROM locations WHERE id=?',(lid,)).fetchone()
+  if old and new:
+   c.execute('UPDATE inventory SET location=? WHERE location=?',(new,old['name']));c.execute('UPDATE products SET default_location=? WHERE default_location=?',(new,old['name']));c.execute('UPDATE locations SET name=? WHERE id=?',(new,lid))
+ return redirect(url_for('manage_locations'))
+@app.post('/manage/locations/<int:lid>/delete')
+def delete_location(lid):
+ target=request.form.get('target','')
+ with db() as c:
+  old=c.execute('SELECT name FROM locations WHERE id=?',(lid,)).fetchone()
+  if old:
+   count=c.execute('SELECT COUNT(*) n FROM inventory WHERE location=? AND quantity>0',(old['name'],)).fetchone()['n']
+   if count and target:
+    c.execute('UPDATE inventory SET location=? WHERE location=?',(target,old['name']));c.execute('UPDATE products SET default_location=? WHERE default_location=?',(target,old['name']))
+   if count==0 or target:c.execute('DELETE FROM locations WHERE id=?',(lid,))
+ return redirect(url_for('manage_locations'))
+@app.post('/settings/warning')
+def warning_setting():
+ value=request.form.get('days','7')
+ if value in {'3','5','7','14'}:
+  with db() as c:c.execute("INSERT INTO settings(key,value) VALUES('expiry_warning_days',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",(value,))
+ return redirect(url_for('more'))
 @app.get('/health')
-def health():return {'status':'ok','version':'0.5.0'}
+def health():return {'status':'ok','version':'0.6.0'}

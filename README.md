@@ -1,16 +1,17 @@
-# Pantry v0.5.0
+# Pantry v0.6.0
 
-Nyt siden v0.4:
-- Ensartet Pantry SVG-ikonsæt for produkttyper i stedet for bogstaver.
-- Ny bundnavigation: Hjem, Søg, Scan, Indkøb, Mere.
-- Aktiv menu er tydeligt markeret.
-- Scan åbner central menu med Scan ind / Scan ud.
-- Indkøbsliste med manuel tilføjelse, antal, færdigmarkering og sletning.
-- Badge på Indkøb viser antal åbne varer.
-- Scan ud kan tilføje produktet til indkøb, når sidste enhed bruges.
-- Brug snart, ingen holdbarhedsdato og v0.4-funktioner bevares.
-- v0.3.1 ZXing live-scanner bevares.
+- Bundmenu: Hjem, Placeringer, Scan, Indkøb, Mere.
+- Placeringsoverblik og visning af varer for hver placering.
+- Tilføj, omdøb og slet placeringer. Varer kan flyttes før sletning.
+- Sortering efter navn, udløbsdato, laveste eller højeste antal.
+- Klikbare produkttyper og lagerposter.
+- Manuel redigering af produkttype, navn, mærke, variant, antal, placering og holdbarhed.
+- Slet lagerpost med bekræftelse.
+- +/- mængde direkte på indkøbslisten.
+- Holdbarhedsvarsel på 3, 5, 7 eller 14 dage.
+- Mindre søge- og tilføjknapper.
+- Scanner, indkøb, ikoner og eksisterende v0.5-data bevares.
 
-TrueNAS image: ghcr.io/dalhoj/pantry:0.5
+TrueNAS image: ghcr.io/dalhoj/pantry:0.6
 Port: 8180:8080
 Data: /mnt/Fast/Docker/pantry:/data
